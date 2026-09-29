@@ -205,9 +205,10 @@ jobs:
       contents: read
       pull-requests: read
     steps:
-      - uses: actions/checkout@v7
       - name: Send Discord webhook message
+        uses: actions/github-script@v7
         env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_ALERT_BOT }}
           NOTIFY_TYPE: ${{ inputs.notify_type }}
           PLATFORM: ${{ inputs.platform }}
           SERVICE_NAME: ${{ inputs.service_name }}
@@ -221,13 +222,173 @@ jobs:
           BUILD_STATUS: ${{ inputs.build_status }}
           DEPLOY_STATUS: ${{ inputs.deploy_status }}
           RUN_STATUS: ${{ inputs.run_status }}
-          # PR merge 通知专用
           PR_AUTHOR: ${{ inputs.pr_author }}
           PR_NUMBER: ${{ inputs.pr_number }}
           PR_TITLE: ${{ inputs.pr_title }}
           PR_URL: ${{ inputs.pr_url }}
           BASE_REF: ${{ inputs.base_ref }}
           HEAD_REF: ${{ inputs.head_ref }}
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_ALERT_BOT }}
-        run: |
-          python3 scripts/discord_notify.py${{ inputs.dry_run && ' --dry' || '' }}
+        with:
+          script: |
+            const e = process.env;
+
+            // ---------- 常量 ----------
+            const ECS_PREFIXES = ['r9s-dev-', 'r9s-stag-', 'r9s-prod-'];
+            const STATUS_COLORS = { success: 5763719, failure: 15548997, cancelled: 10070709 };
+            const DEFAULT_COLOR = 15548997;
+            const MAX_RETRIES = 3;
+            const RETRY_BACKOFF = 1000; // ms
+            const DISCORD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36';
+
+            // ---------- 辅助函数 ----------
+            const get = (k, d = '') => e[k] ?? d;
+            const displaySvc = (n) => ECS_PREFIXES.some(p => n.startsWith(p)) ? n.slice(ECS_PREFIXES.find(p => n.startsWith(p)).length) : n;
+            const repo = () => get('REPO', get('GITHUB_REPOSITORY'));
+            const sha7 = () => (get('SHA', get('GITHUB_SHA')) || '').slice(0, 7);
+            const actor = () => get('ACTOR', get('GITHUB_ACTOR'));
+            const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+            // ---------- 四种 markdown 构建（与 wechat-notify 保持一致） ----------
+            const builders = {
+              deploy_result: () => {
+                const svc = displaySvc(get('SERVICE_NAME'));
+                const bs = get('BUILD_STATUS'), ds = get('DEPLOY_STATUS');
+                const status = bs === 'success' ? ds : bs;
+                const icon = status === 'success' ? '✅' : '❌';
+                const shaFull = get('SHA', get('GITHUB_SHA'));
+                return (
+                  `### ${icon} ${get('PLATFORM')} ${svc} 部署${status === 'success' ? '成功' : '失败'}\n` +
+                  `**环境**：${get('ENV_NAME')}\n` +
+                  `**区域**：${get('REGION')}\n` +
+                  `**仓库**：${repo()}\n` +
+                  `**版本**：${get('RELEASE_TAG')} (${shaFull.slice(0, 7)})\n` +
+                  `**操作人**：${actor()}\n` +
+                  `**构建状态**：${bs}\n` +
+                  `**部署状态**：${ds}\n`
+                );
+              },
+              deploy: () => {
+                const svc = displaySvc(get('SERVICE_NAME'));
+                return (
+                  `### 🚀 ${svc} 部署任务已提交\n` +
+                  `**环境**：${get('ENV_NAME', 'test')}\n` +
+                  `**区域**：${get('REGION')}\n` +
+                  `**仓库**：${repo()}\n` +
+                  `**版本**：${sha7()}\n` +
+                  `**操作人**：${actor()}\n` +
+                  `**提交状态**：${get('DEPLOY_STATUS')}\n`
+                );
+              },
+              build: () => {
+                const svc = displaySvc(get('SERVICE_NAME'));
+                const ds = get('DEPLOY_STATUS');
+                const icon = ds === 'success' ? '✅' : '❌';
+                const label = ds === 'success' ? '成功' : ds === 'failure' ? '失败' : ds || '未知';
+                return (
+                  `### ${icon} ${svc} 构建${label}\n` +
+                  `**环境**：${get('ENV_NAME', 'test')}\n` +
+                  `**区域**：${get('REGION')}\n` +
+                  `**仓库**：${repo()}\n` +
+                  `**版本**：${sha7()}\n` +
+                  `**操作人**：${actor()}\n` +
+                  `**构建状态**：${label}\n`
+                );
+              },
+              merge: () => {
+                const prAuthor = get('PR_AUTHOR');
+                const prNumber = get('PR_NUMBER') || (get('PR_URL') ? get('PR_URL').replace(/\/$/, '').split('/').pop() : '');
+                const prTitle = get('PR_TITLE');
+                const prUrl = get('PR_URL');
+                const headRef = get('HEAD_REF');
+                const baseRef = get('BASE_REF');
+                const titleLine = (prNumber && prUrl) ? `### ✅ PR [${prNumber}](${prUrl}) 已合并` : '### ✅ PR 已合并';
+                return (
+                  `${titleLine}\n` +
+                  `**仓库**：${repo()}\n` +
+                  `**提交人**：${prAuthor}\n` +
+                  `**分支**：${headRef} → ${baseRef}\n` +
+                  `**标题**：${prTitle}\n`
+                );
+              },
+            };
+
+            // ---------- markdown → Discord embed ----------
+            function buildEmbed(markdown, notifyType) {
+              const lines = markdown.trim().split('\n');
+              let title = '', description;
+              if (lines[0].startsWith('### ')) {
+                title = lines[0].slice(4).trim();
+                description = lines.slice(1).join('\n').trim();
+              } else {
+                description = markdown.trim();
+              }
+
+              // RUN_URL 为空时移除空链接行 `**详情**：[查看工作流]()`
+              const runUrl = get('RUN_URL');
+              if (!runUrl) {
+                description = description.split('\n').filter(l => !l.endsWith('[查看工作流]()')).join('\n').trim();
+              } else {
+                description += `\n**详情**：[查看工作流](${runUrl})`;
+              }
+
+              // 颜色根据状态解析
+              let status = 'success';
+              if (notifyType === 'deploy_result') {
+                const bs = get('BUILD_STATUS'), ds = get('DEPLOY_STATUS');
+                status = bs === 'success' ? ds : bs;
+              } else if (notifyType === 'build') {
+                status = get('DEPLOY_STATUS') || 'success';
+              }
+              const color = STATUS_COLORS[status] ?? DEFAULT_COLOR;
+
+              // title/description 长度截断（Discord 限制 256/4096）
+              if (title.length > 256) title = title.slice(0, 253) + '...';
+              if (description.length > 4096) description = description.slice(0, 4093) + '...';
+
+              const fields = { title, description, color };
+              if (runUrl) fields.url = runUrl;
+              return { embeds: [fields] };
+            }
+
+            // ---------- 主流程 ----------
+            const webhookUrl = get('DISCORD_WEBHOOK_URL');
+            if (!webhookUrl) {
+              core.warning('Missing DISCORD_WEBHOOK_URL; deployment notification not sent.');
+              return;
+            }
+
+            const notifyType = get('NOTIFY_TYPE', 'merge');
+            const markdown = (builders[notifyType] || builders.merge)();
+            const embed = buildEmbed(markdown, notifyType);
+
+            // dry_run
+            if (context.inputs?.dry_run === true || context.inputs?.dry_run === 'true') {
+              core.info('[dry_run] generated Discord embed:\n' + JSON.stringify(embed, null, 2));
+              return;
+            }
+
+            // ---------- 发送（带重试） ----------
+            const payload = JSON.stringify(embed);
+            let lastErr;
+
+            for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+              try {
+                const resp = await fetch(webhookUrl, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json; charset=utf-8',
+                    'User-Agent': DISCORD_UA,
+                  },
+                  body: payload,
+                });
+                const body = await resp.text();
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${body}`);
+                core.info('Discord notification sent successfully.');
+                return;
+              } catch (err) {
+                lastErr = err;
+                core.warning(`Attempt ${attempt}/${MAX_RETRIES} failed: ${err.message}`);
+                if (attempt < MAX_RETRIES) await sleep(RETRY_BACKOFF * Math.pow(2, attempt - 1));
+              }
+            }
+            throw lastErr;

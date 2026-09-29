@@ -213,10 +213,9 @@ jobs:
       contents: read
       pull-requests: read
     steps:
-      - uses: actions/checkout@v7
       - name: Send WeChat Work webhook message
+        uses: actions/github-script@v7
         env:
-          # 优先用 secrets 块传入的值，fallback 到 input 传入
           WECHAT_WEBHOOK_KEY: ${{ secrets.wechat_webhook_key || inputs.wechat_webhook_key }}
           NOTIFY_TYPE: ${{ inputs.notify_type }}
           PLATFORM: ${{ inputs.platform }}
@@ -231,24 +230,133 @@ jobs:
           BUILD_STATUS: ${{ inputs.build_status }}
           DEPLOY_STATUS: ${{ inputs.deploy_status }}
           RUN_STATUS: ${{ inputs.run_status }}
-          # PR merge 通知专用
           PR_AUTHOR: ${{ inputs.pr_author }}
           PR_NUMBER: ${{ inputs.pr_number }}
           PR_TITLE: ${{ inputs.pr_title }}
           PR_URL: ${{ inputs.pr_url }}
           BASE_REF: ${{ inputs.base_ref }}
           HEAD_REF: ${{ inputs.head_ref }}
-        shell: bash
-        run: |
-          if [[ -z "${WECHAT_WEBHOOK_KEY:-}" ]]; then
-            echo "::warning::Missing secret PROD_WECHAT_WEBHOOK_KEY; deployment notification not sent."
-            exit 0
-          fi
+        with:
+          script: |
+            const e = process.env;
 
+            // ---------- 常量 ----------
+            const ECS_PREFIXES = ['r9s-dev-', 'r9s-stag-', 'r9s-prod-'];
+            const STATUS_LABELS = { success: '成功', failure: '失败', cancelled: '已取消' };
+            const MAX_RETRIES = 3;
+            const RETRY_BACKOFF = 1000; // ms
 
-          # dry_run 模式只打印不发送
-          if [[ "${{ inputs.dry_run }}" == "true" ]]; then
-            python3 scripts/wechat_work_notify.py --dry
-          else
-            python3 scripts/wechat_work_notify.py
-          fi
+            // ---------- 辅助函数 ----------
+            const get = (k, d = '') => e[k] ?? d;
+            const displaySvc = (n) => ECS_PREFIXES.some(p => n.startsWith(p)) ? n.slice(ECS_PREFIXES.find(p => n.startsWith(p)).length) : n;
+            const repo = () => get('REPO', get('GITHUB_REPOSITORY'));
+            const sha7 = () => (get('SHA', get('GITHUB_SHA')) || '').slice(0, 7);
+            const actor = () => get('ACTOR', get('GITHUB_ACTOR'));
+            const label = (s, d = '未完成') => STATUS_LABELS[s] || d;
+            const withUrl = (c) => get('RUN_URL') ? c + `**详情**：[查看工作流](${get('RUN_URL')})\n` : c;
+            const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+            // ---------- 四种 markdown 构建 ----------
+            const builders = {
+              deploy_result: () => {
+                const svc = displaySvc(get('SERVICE_NAME'));
+                const bs = get('BUILD_STATUS'), ds = get('DEPLOY_STATUS');
+                const status = bs === 'success' ? ds : bs;
+                const icon = status === 'success' ? '✅' : '❌';
+                const shaFull = get('SHA', get('GITHUB_SHA'));
+                return withUrl(
+                  `### ${icon} ${get('PLATFORM')} ${svc} 部署${label(status)}\n` +
+                  `**环境**：${get('ENV_NAME')}\n` +
+                  `**区域**：${get('REGION')}\n` +
+                  `**仓库**：${repo()}\n` +
+                  `**版本**：${get('RELEASE_TAG')} (${shaFull.slice(0, 7)})\n` +
+                  `**操作人**：${actor()}\n` +
+                  `**构建状态**：${bs}\n` +
+                  `**部署状态**：${ds}\n`
+                );
+              },
+              deploy: () => {
+                const svc = displaySvc(get('SERVICE_NAME'));
+                return withUrl(
+                  `### 🚀 ${svc} 部署任务已提交\n` +
+                  `**环境**：${get('ENV_NAME', 'test')}\n` +
+                  `**区域**：${get('REGION')}\n` +
+                  `**仓库**：${repo()}\n` +
+                  `**版本**：${sha7()}\n` +
+                  `**操作人**：${actor()}\n` +
+                  `**提交状态**：${get('DEPLOY_STATUS')}\n`
+                );
+              },
+              build: () => {
+                const svc = displaySvc(get('SERVICE_NAME'));
+                const ds = get('DEPLOY_STATUS');
+                const icon = ds === 'success' ? '✅' : '❌';
+                return withUrl(
+                  `### ${icon} ${svc} 构建${label(ds, ds || '未知')}\n` +
+                  `**环境**：${get('ENV_NAME', 'test')}\n` +
+                  `**区域**：${get('REGION')}\n` +
+                  `**仓库**：${repo()}\n` +
+                  `**版本**：${sha7()}\n` +
+                  `**操作人**：${actor()}\n` +
+                  `**构建状态**：${label(ds, ds || '未知')}\n`
+                );
+              },
+              merge: () => {
+                const prAuthor = get('PR_AUTHOR');
+                const prNumber = get('PR_NUMBER') || (get('PR_URL') ? get('PR_URL').replace(/\/$/, '').split('/').pop() : '');
+                const prTitle = get('PR_TITLE');
+                const prUrl = get('PR_URL');
+                const headRef = get('HEAD_REF');
+                const baseRef = get('BASE_REF');
+                const titleLine = (prNumber && prUrl) ? `### ✅ PR [${prNumber}](${prUrl}) 已合并` : '### ✅ PR 已合并';
+                return withUrl(
+                  `${titleLine}\n` +
+                  `**仓库**：${repo()}\n` +
+                  `**提交人**：${prAuthor}\n` +
+                  `**分支**：${headRef} → ${baseRef}\n` +
+                  `**标题**：${prTitle}\n`
+                );
+              },
+            };
+
+            // ---------- 主流程 ----------
+            const webhookKey = get('WECHAT_WEBHOOK_KEY');
+            if (!webhookKey) {
+              core.warning('Missing WECHAT_WEBHOOK_KEY; deployment notification not sent.');
+              return;
+            }
+
+            const notifyType = get('NOTIFY_TYPE', 'merge');
+            const content = (builders[notifyType] || builders.merge)();
+
+            // dry_run 通过 context.inputs 读取
+            if (context.inputs?.dry_run === true || context.inputs?.dry_run === 'true') {
+              core.info('[dry_run] generated markdown:\n' + content);
+              return;
+            }
+
+            // ---------- 发送（带重试） ----------
+            const url = `https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=${webhookKey}`;
+            const payload = JSON.stringify({ msgtype: 'markdown', markdown: { content } });
+            let lastErr;
+
+            for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+              try {
+                const resp = await fetch(url, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json; charset=utf-8' },
+                  body: payload,
+                });
+                const body = await resp.text();
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${body}`);
+                const result = JSON.parse(body);
+                if (result.errcode !== 0) throw new Error(`WeChat Work error: ${body}`);
+                core.info('WeChat Work notification sent successfully.');
+                return;
+              } catch (err) {
+                lastErr = err;
+                core.warning(`Attempt ${attempt}/${MAX_RETRIES} failed: ${err.message}`);
+                if (attempt < MAX_RETRIES) await sleep(RETRY_BACKOFF * Math.pow(2, attempt - 1));
+              }
+            }
+            throw lastErr;
