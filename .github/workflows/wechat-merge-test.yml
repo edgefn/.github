@@ -5,8 +5,8 @@ on:
 
 jobs:
   notify-test:
-    name: Wechat Notify test
-    uses: edgefn/.github/.github/workflows/wechat-notify.yml@main
+    name: Discord Notify test
+    uses: edgefn/.github/.github/workflows/discord-notify.yml@main
     with:
       environment_name: prod
       repo: edgefn/next-router-meta
@@ -19,5 +19,3 @@ jobs:
       head_ref: next-router-meta
       run_url: ${{ github.event.workflow_run.html_url }}
       dry_run: true
-    secrets:
-      wechat_webhook_key: ${{ secrets.PROD_WECHAT_WEBHOOK_KEY }}

@@ -1,4 +1,4 @@
-name: Wechat Notify
+name: Discord Notify
 
 on:
   workflow_call:
@@ -105,15 +105,7 @@ on:
         required: false
         type: boolean
         default: false
-      wechat_webhook_key:
-        description: "WeChat Work Webhook Key"
-        required: false
-        type: string
-        default: ""
-    secrets:
-      wechat_webhook_key:
-        description: "WeChat Work Webhook Key (alternative pass-through)"
-        required: false
+
   workflow_dispatch:
     inputs:
       environment_name:
@@ -205,24 +197,17 @@ on:
         required: false
         type: boolean
         default: true
-      wechat_webhook_key:
-        description: "WeChat Work Webhook Key"
-        required: false
-        type: string
-        default: ""
 
 jobs:
-  notify:
+  d-notify:
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: read
     steps:
       - uses: actions/checkout@v7
-      - name: Send WeChat Work webhook message
+      - name: Send Discord webhook message
         env:
-          # 优先用 secrets 块传入的值，fallback 到 input 传入
-          WECHAT_WEBHOOK_KEY: ${{ secrets.wechat_webhook_key || inputs.wechat_webhook_key }}
           NOTIFY_TYPE: ${{ inputs.notify_type }}
           PLATFORM: ${{ inputs.platform }}
           SERVICE_NAME: ${{ inputs.service_name }}
@@ -236,6 +221,7 @@ jobs:
           BUILD_STATUS: ${{ inputs.build_status }}
           DEPLOY_STATUS: ${{ inputs.deploy_status }}
           RUN_STATUS: ${{ inputs.run_status }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_ALERM_BOT }}
           # PR merge 通知专用
           PR_AUTHOR: ${{ inputs.pr_author }}
           PR_NUMBER: ${{ inputs.pr_number }}
@@ -243,17 +229,5 @@ jobs:
           PR_URL: ${{ inputs.pr_url }}
           BASE_REF: ${{ inputs.base_ref }}
           HEAD_REF: ${{ inputs.head_ref }}
-        shell: bash
         run: |
-          if [[ -z "${WECHAT_WEBHOOK_KEY:-}" ]]; then
-            echo "::warning::Missing secret PROD_WECHAT_WEBHOOK_KEY; deployment notification not sent."
-            exit 0
-          fi
-
-
-          # dry_run 模式只打印不发送
-          if [[ "${{ inputs.dry_run }}" == "true" ]]; then
-            python3 scripts/wechat_work_notify.py --dry
-          else
-            python3 scripts/wechat_work_notify.py
-          fi
+          python3 scripts/discord_notify.py${{ inputs.dry_run && ' --dry' || '' }}
