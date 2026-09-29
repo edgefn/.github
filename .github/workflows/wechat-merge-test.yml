@@ -1,0 +1,27 @@
+name: WeChat Work Notify test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  notify-test:
+    name: Wechat Notify test
+    runs-on: ubuntu-latest
+    environment: prod
+    permissions:
+      contents: read
+    steps:
+      - name: call wechat-notify.yml
+        uses: edgefn/.github/.github/workflows/wechat-notify.yml@main
+        with:
+          environment_name: prod
+          repo: edgefn/next-router-meta
+          notify_type: merge
+          pr_author: dotwoo
+          pr_number: 123456
+          pr_title: "Merge branch 'main' into 'next-router-meta'"
+          pr_url: https://github.com/edgefn/next-router-meta/pull/123456
+          base_ref: main
+          head_ref: next-router-meta
+          dry_run: true
+          wechat_webhook_key: ${{ secrets.PROD_WECHAT_WEBHOOK_KEY }}

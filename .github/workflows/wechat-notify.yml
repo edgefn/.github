@@ -1,0 +1,261 @@
+name: Wechat Notify Common
+
+on:
+  workflow_call:
+    inputs:
+      # —— 保留 env 块实际引用的 inputs ——
+      environment_name:
+        description: "GitHub environment used to resolve notification settings."
+        required: true
+        type: string
+      repo:
+        description: "仓库标识（如 edgefn/next-router-meta）"
+        required: true
+        type: string
+      # —— 新增 env 块 L94-107 所需的 inputs ——
+      notify_type:
+        description: "通知类型: deploy / deploy_result / build / merge"
+        required: true
+        type: string
+        default: "deploy_result"
+      platform:
+        description: "部署平台（如 Aliyun SAE）"
+        required: false
+        type: string
+        default: ""
+      service_name:
+        description: "服务名称"
+        required: false
+        type: string
+        default: ""
+      region:
+        description: "部署区域"
+        required: false
+        type: string
+        default: ""
+      sha:
+        description: "提交 SHA"
+        required: false
+        type: string
+        default: ""
+      release_tag:
+        description: "发布标签"
+        required: false
+        type: string
+        default: ""
+      actor:
+        description: "触发操作的用户"
+        required: false
+        type: string
+        default: ""
+      run_url:
+        description: "工作流运行链接"
+        required: false
+        type: string
+        default: ""
+      build_status:
+        description: "构建状态: success / failure / cancelled"
+        required: false
+        type: string
+        default: ""
+      deploy_status:
+        description: "部署状态: success / failure / cancelled"
+        required: false
+        type: string
+        default: ""
+      run_status:
+        description: "工作流运行状态"
+        required: false
+        type: string
+        default: ""
+      # —— PR merge 通知专用 inputs（NOTIFY_TYPE=merge 时生效）——
+      pr_author:
+        description: "PR 作者"
+        required: false
+        type: string
+        default: ""
+      pr_number:
+        description: "PR 编号"
+        required: false
+        type: string
+        default: ""
+      pr_title:
+        description: "PR 标题"
+        required: false
+        type: string
+        default: ""
+      pr_url:
+        description: "PR 链接"
+        required: false
+        type: string
+        default: ""
+      base_ref:
+        description: "PR 目标分支"
+        required: false
+        type: string
+        default: ""
+      head_ref:
+        description: "PR 来源分支"
+        required: false
+        type: string
+        default: ""
+      # —— dry_run 控制（bash 脚本 --dry 参数需要）——
+      dry_run:
+        description: "Print notification content without sending it."
+        required: false
+        type: boolean
+        default: false
+      wechat_webhook_key:
+        description: "WeChat Work Webhook Key"
+        required: false
+        type: string
+        default: ""
+    secrets:
+      DEV_NEXT_ROUTER_WECHAT_WEBHOOK_KEY:
+        required: false
+      WECHAT_WEBHOOK_KEY:
+        required: false
+  workflow_dispatch:
+    inputs:
+      environment_name:
+        description: "GitHub environment used to resolve notification settings."
+        required: false
+        type: string
+        default: test
+      repo:
+        required: false
+        type: string
+        default: edgefn/next-router-meta
+      notify_type:
+        description: "通知类型: deploy / deploy_result / build / merge"
+        required: true
+        type: string
+        default: "deploy_result"
+      platform:
+        required: false
+        type: string
+        default: ""
+      service_name:
+        required: false
+        type: string
+        default: ""
+      region:
+        required: false
+        type: string
+        default: ""
+      sha:
+        required: false
+        type: string
+        default: ""
+      release_tag:
+        required: false
+        type: string
+        default: ""
+      actor:
+        required: false
+        type: string
+        default: ""
+      run_url:
+        required: false
+        type: string
+        default: ""
+      build_status:
+        required: false
+        type: string
+        default: ""
+      deploy_status:
+        required: false
+        type: string
+        default: ""
+      run_status:
+        required: false
+        type: string
+        default: ""
+      pr_author:
+        description: "PR 作者（merge 通知用）"
+        required: false
+        type: string
+        default: ""
+      pr_number:
+        description: "PR 编号（merge 通知用）"
+        required: false
+        type: string
+        default: ""
+      pr_title:
+        description: "PR 标题（merge 通知用）"
+        required: false
+        type: string
+        default: ""
+      pr_url:
+        description: "PR 链接（merge 通知用）"
+        required: false
+        type: string
+        default: ""
+      base_ref:
+        description: "PR 目标分支（merge 通知用）"
+        required: false
+        type: string
+        default: ""
+      head_ref:
+        description: "PR 来源分支（merge 通知用）"
+        required: false
+        type: string
+        default: ""
+      dry_run:
+        description: "Print notification content without sending it."
+        required: false
+        type: boolean
+        default: true
+      wechat_webhook_key:
+        description: "WeChat Work Webhook Key"
+        required: false
+        type: string
+        default: ""
+
+jobs:
+  notify:
+    runs-on:
+      group: Default
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Send WeChat Work webhook message
+        env:
+          # secrets（两个 key 都注册，bash 脚本里做 fallback）
+          WECHAT_WEBHOOK_KEY: ${{ inputs.wechat_webhook_key }}
+          NOTIFY_TYPE: ${{ inputs.notify_type }}
+          PLATFORM: ${{ inputs.platform }}
+          SERVICE_NAME: ${{ inputs.service_name }}
+          ENV_NAME: ${{ inputs.environment_name }}
+          REGION: ${{ inputs.region }}
+          REPO: ${{ inputs.repo }}
+          SHA: ${{ inputs.sha }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          ACTOR: ${{ inputs.actor }}
+          RUN_URL: ${{ inputs.run_url }}
+          BUILD_STATUS: ${{ inputs.build_status }}
+          DEPLOY_STATUS: ${{ inputs.deploy_status }}
+          RUN_STATUS: ${{ inputs.run_status }}
+          # PR merge 通知专用
+          PR_AUTHOR: ${{ inputs.pr_author }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          PR_TITLE: ${{ inputs.pr_title }}
+          PR_URL: ${{ inputs.pr_url }}
+          BASE_REF: ${{ inputs.base_ref }}
+          HEAD_REF: ${{ inputs.head_ref }}
+        shell: bash
+        run: |
+          if [[ -z "${WECHAT_WEBHOOK_KEY:-}" ]]; then
+            echo "::warning::Missing secret PROD_WECHAT_WEBHOOK_KEY; deployment notification not sent."
+            exit 0
+          fi
+
+
+          # dry_run 模式只打印不发送
+          if [[ "${{ inputs.dry_run }}" == "true" ]]; then
+            python3 scripts/wechat_work_notify.py --dry
+          else
+            python3 scripts/wechat_work_notify.py
+          fi
