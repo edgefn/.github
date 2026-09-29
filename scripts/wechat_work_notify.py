@@ -134,6 +134,7 @@ def _build_deploy_result() -> str:
         f"**操作人**：{_short_actor()}\n"
         f"**构建状态**：{build_status}\n"
         f"**部署状态**：{deploy_status}\n"
+        f"**详情**：[查看工作流]({env('RUN_URL', '')})\n"
     )
     return _with_run_url(content)
 
@@ -151,6 +152,7 @@ def _build_deploy() -> str:
         f"**版本**：{_short_sha()}\n"
         f"**操作人**：{_short_actor()}\n"
         f"**提交状态**：{deploy_status}\n"
+        f"**详情**：[查看工作流]({env('RUN_URL', '')})\n"
     )
     return _with_run_url(content)
 
@@ -170,6 +172,7 @@ def _build_build() -> str:
         f"**版本**：{_short_sha()}\n"
         f"**操作人**：{_short_actor()}\n"
         f"**构建状态**：{status_label}\n"
+        f"**详情**：[查看工作流]({env('RUN_URL', '')})\n"
     )
     return _with_run_url(content)
 
@@ -196,6 +199,7 @@ def _build_pr_merge() -> str:
         f"**提交人**：{pr_author}\n"
         f"**分支**：{head_ref} → {base_ref}\n"
         f"**标题**：{pr_title}\n"
+        f"**详情**：[查看工作流]({env('RUN_URL', '')})\n"
     )
 
 
