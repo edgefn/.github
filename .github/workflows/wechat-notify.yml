@@ -105,11 +105,6 @@ on:
         required: false
         type: boolean
         default: false
-      wechat_webhook_key:
-        description: "WeChat Work Webhook Key"
-        required: false
-        type: string
-        default: ""
     secrets:
       wechat_webhook_key:
         description: "WeChat Work Webhook Key (alternative pass-through)"
