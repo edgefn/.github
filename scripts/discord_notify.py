@@ -147,7 +147,11 @@ def post_discord_webhook(webhook_url: str, payload: dict) -> None:
             req = urllib.request.Request(
                 webhook_url,
                 data=data,
-                headers={"Content-Type": "application/json; charset=utf-8"},
+                headers={
+                    "Content-Type": "application/json; charset=utf-8",
+                    # Cloudflare 会拦截无 User-Agent 的请求（error 1010）
+                    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+                },
                 method="POST",
             )
             with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT) as resp:
