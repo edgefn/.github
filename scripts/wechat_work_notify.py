@@ -171,7 +171,6 @@ def _build_build() -> str:
         f"**版本**：{_short_sha()}\n"
         f"**操作人**：{_short_actor()}\n"
         f"**构建状态**：{status_label}\n"
-        f"**详情**：[查看工作流]({env('RUN_URL', '')})\n"
     )
     return _with_run_url(content)
 
