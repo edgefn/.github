@@ -228,5 +228,6 @@ jobs:
           PR_URL: ${{ inputs.pr_url }}
           BASE_REF: ${{ inputs.base_ref }}
           HEAD_REF: ${{ inputs.head_ref }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_ALERM_BOT }}
         run: |
-          DISCORD_WEBHOOK_URL=${{ secrets.DISCORD_ALERM_BOT }} python3 scripts/discord_notify.py${{ inputs.dry_run && ' --dry' || '' }}
+          python3 scripts/discord_notify.py${{ inputs.dry_run && ' --dry' || '' }}
