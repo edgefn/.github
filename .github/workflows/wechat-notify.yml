@@ -213,8 +213,7 @@ on:
 
 jobs:
   notify:
-    runs-on:
-      group: Default
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: read
