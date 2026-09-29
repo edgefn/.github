@@ -18,4 +18,5 @@ jobs:
       base_ref: main
       head_ref: next-router-meta
       dry_run: true
+    secrets:
       wechat_webhook_key: ${{ secrets.PROD_WECHAT_WEBHOOK_KEY }}

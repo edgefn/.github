@@ -111,9 +111,8 @@ on:
         type: string
         default: ""
     secrets:
-      DEV_NEXT_ROUTER_WECHAT_WEBHOOK_KEY:
-        required: false
-      WECHAT_WEBHOOK_KEY:
+      wechat_webhook_key:
+        description: "WeChat Work Webhook Key (alternative pass-through)"
         required: false
   workflow_dispatch:
     inputs:
@@ -223,8 +222,8 @@ jobs:
       - uses: actions/checkout@v7
       - name: Send WeChat Work webhook message
         env:
-          # secrets（两个 key 都注册，bash 脚本里做 fallback）
-          WECHAT_WEBHOOK_KEY: ${{ inputs.wechat_webhook_key }}
+          # 优先用 secrets 块传入的值，fallback 到 input 传入
+          WECHAT_WEBHOOK_KEY: ${{ secrets.wechat_webhook_key || inputs.wechat_webhook_key }}
           NOTIFY_TYPE: ${{ inputs.notify_type }}
           PLATFORM: ${{ inputs.platform }}
           SERVICE_NAME: ${{ inputs.service_name }}
