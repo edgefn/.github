@@ -18,4 +18,4 @@ jobs:
       base_ref: main
       head_ref: next-router-meta
       run_url: ${{ github.event.workflow_run.html_url }}
-      dry_run: true
+      dry_run: false
