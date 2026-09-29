@@ -6,7 +6,7 @@ on:
 jobs:
   notify-test:
     name: Wechat Notify test
-    uses: edgefn/.github/workflows/wechat-notify.yml@main
+    uses: edgefn/.github/.github/workflows/wechat-notify.yml@main
     with:
       environment_name: prod
       repo: edgefn/next-router-meta
