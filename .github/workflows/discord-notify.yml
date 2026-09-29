@@ -221,7 +221,6 @@ jobs:
           BUILD_STATUS: ${{ inputs.build_status }}
           DEPLOY_STATUS: ${{ inputs.deploy_status }}
           RUN_STATUS: ${{ inputs.run_status }}
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_ALERM_BOT }}
           # PR merge 通知专用
           PR_AUTHOR: ${{ inputs.pr_author }}
           PR_NUMBER: ${{ inputs.pr_number }}
@@ -230,4 +229,4 @@ jobs:
           BASE_REF: ${{ inputs.base_ref }}
           HEAD_REF: ${{ inputs.head_ref }}
         run: |
-          python3 scripts/discord_notify.py${{ inputs.dry_run && ' --dry' || '' }}
+          DISCORD_WEBHOOK_URL=${{ secrets.DISCORD_ALERM_BOT }} python3 scripts/discord_notify.py${{ inputs.dry_run && ' --dry' || '' }}
