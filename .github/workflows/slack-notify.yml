@@ -14,7 +14,7 @@ on:
         type: string
       # —— 新增 env 块 L94-107 所需的 inputs ——
       notify_type:
-        description: "通知类型: deploy / deploy_result / build / merge"
+        description: "通知类型: deploy / deploy_result / build / merge / branch_cleanup"
         required: true
         type: string
         default: "deploy_result"
@@ -100,6 +100,22 @@ on:
         type: string
         default: ""
       # —— dry_run 控制（bash 脚本 --dry 参数需要）——
+      # —— 已合并分支清理通知专用 inputs ——
+      default_branch:
+        description: "默认分支（branch_cleanup 通知用）"
+        required: false
+        type: string
+        default: ""
+      deleted_count:
+        description: "已删除分支数量（branch_cleanup 通知用）"
+        required: false
+        type: string
+        default: "0"
+      deleted_branches:
+        description: "已删除分支列表，可包含换行（branch_cleanup 通知用）"
+        required: false
+        type: string
+        default: ""
       dry_run:
         description: "Print notification content without sending it."
         required: false
@@ -123,7 +139,7 @@ on:
         type: string
         default: edgefn/next-router-meta
       notify_type:
-        description: "通知类型: deploy / deploy_result / build / merge"
+        description: "通知类型: deploy / deploy_result / build / merge / branch_cleanup"
         required: true
         type: string
         default: "deploy_result"
@@ -197,6 +213,22 @@ on:
         required: false
         type: string
         default: ""
+      # —— 已合并分支清理通知专用 inputs ——
+      default_branch:
+        description: "默认分支（branch_cleanup 通知用）"
+        required: false
+        type: string
+        default: ""
+      deleted_count:
+        description: "已删除分支数量（branch_cleanup 通知用）"
+        required: false
+        type: string
+        default: "0"
+      deleted_branches:
+        description: "已删除分支列表，可包含换行（branch_cleanup 通知用）"
+        required: false
+        type: string
+        default: ""
       dry_run:
         description: "Print notification content without sending it."
         required: false
@@ -234,6 +266,9 @@ jobs:
           PR_URL: ${{ inputs.pr_url }}
           BASE_REF: ${{ inputs.base_ref }}
           HEAD_REF: ${{ inputs.head_ref }}
+          DEFAULT_BRANCH: ${{ inputs.default_branch }}
+          DELETED_COUNT: ${{ inputs.deleted_count }}
+          DELETED_BRANCHES: ${{ inputs.deleted_branches }}
         with:
           script: |
             const e = process.env;
@@ -253,7 +288,7 @@ jobs:
             const actor = () => get('ACTOR', get('GITHUB_ACTOR'));
             const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-            // ---------- 四种 markdown 构建（与 wechat-notify 保持一致） ----------
+            // ---------- 五种 markdown 构建（与 wechat-notify 保持一致） ----------
             const builders = {
               deploy_result: () => {
                 const svc = displaySvc(get('SERVICE_NAME'));
@@ -298,6 +333,19 @@ jobs:
                   `**操作人**：${actor()}\n` +
                   `**构建状态**：${label}\n`
                 );
+              },
+              branch_cleanup: () => {
+                const defaultBranch = get('DEFAULT_BRANCH');
+                const deletedCount = get('DELETED_COUNT') || '0';
+                const deletedBranches = get('DELETED_BRANCHES').trim();
+                let content = (
+                  `### 🧹 已清理已合并分支\n` +
+                  `**仓库**：${repo()}\n` +
+                  `**默认分支**：${defaultBranch}\n` +
+                  `**删除数量**：${deletedCount}\n`
+                );
+                if (deletedBranches) content += `**已删除分支**：\n${deletedBranches}\n`;
+                return content;
               },
               merge: () => {
                 const prAuthor = get('PR_AUTHOR');
