@@ -244,7 +244,7 @@ jobs:
     steps:
       # Reusable workflows execute in the caller context; load our trusted formatter.
       - name: Checkout notification scripts
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: edgefn/.github
           # Local runs use their commit; cross-repository callers use the shared main branch.
@@ -253,7 +253,7 @@ jobs:
           persist-credentials: false
           sparse-checkout: .github/scripts
       - name: Send Slack webhook message
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_ALERT_BOT }}
           DRY_RUN: ${{ inputs.dry_run }}
