@@ -122,7 +122,7 @@ function buildNotification(channel, env = process.env) {
 
   if (channel === 'slack') {
     return {
-      channel: '#alert', username: 'webhookbot', icon_emoji: ':ghost:',
+      channel: '#alert', username: 'github', icon_emoji: ':rocket:',
       text: `*${slackMarkdown(title)}*`,
       attachments: [{
         color: STATUS_COLORS[status] ?? STATUS_COLORS.failure,
