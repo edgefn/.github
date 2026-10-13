@@ -1,0 +1,394 @@
+name: All Notify
+
+# 合并 slack-notify.yml / discord-notify.yml / wechat-notify.yml
+# 使用 matrix 并行发送到三个渠道，一套 inputs 一套脚本。
+
+on:
+  workflow_call:
+    inputs:
+      environment_name:
+        description: "GitHub environment used to resolve notification settings."
+        required: true
+        type: string
+      repo:
+        description: "仓库标识（如 edgefn/next-router-meta）"
+        required: true
+        type: string
+      notify_type:
+        description: "通知类型: deploy / deploy_result / build / merge / branch_cleanup"
+        required: true
+        type: string
+        default: "deploy_result"
+      platform:
+        description: "部署平台（如 Aliyun SAE）"
+        required: false
+        type: string
+        default: ""
+      service_name:
+        description: "服务名称"
+        required: false
+        type: string
+        default: ""
+      region:
+        description: "部署区域"
+        required: false
+        type: string
+        default: ""
+      sha:
+        description: "提交 SHA"
+        required: false
+        type: string
+        default: ""
+      release_tag:
+        description: "发布标签"
+        required: false
+        type: string
+        default: ""
+      actor:
+        description: "触发操作的用户"
+        required: false
+        type: string
+        default: ""
+      run_url:
+        description: "工作流运行链接"
+        required: false
+        type: string
+        default: ""
+      build_status:
+        description: "构建状态: success / failure / cancelled"
+        required: false
+        type: string
+        default: ""
+      deploy_status:
+        description: "部署状态: success / failure / cancelled"
+        required: false
+        type: string
+        default: ""
+      run_status:
+        description: "工作流运行状态"
+        required: false
+        type: string
+        default: ""
+      # —— PR merge 通知专用 ——
+      pr_author:
+        description: "PR 作者"
+        required: false
+        type: string
+        default: ""
+      pr_number:
+        description: "PR 编号"
+        required: false
+        type: string
+        default: ""
+      pr_title:
+        description: "PR 标题"
+        required: false
+        type: string
+        default: ""
+      pr_url:
+        description: "PR 链接"
+        required: false
+        type: string
+        default: ""
+      base_ref:
+        description: "PR 目标分支"
+        required: false
+        type: string
+        default: ""
+      head_ref:
+        description: "PR 来源分支"
+        required: false
+        type: string
+        default: ""
+      # —— 已合并分支清理通知专用 ——
+      default_branch:
+        description: "默认分支（branch_cleanup 通知用）"
+        required: false
+        type: string
+        default: ""
+      deleted_count:
+        description: "已删除分支数量（branch_cleanup 通知用）"
+        required: false
+        type: string
+        default: "0"
+      deleted_branches:
+        description: "已删除分支列表（branch_cleanup 通知用）"
+        required: false
+        type: string
+        default: ""
+      dry_run:
+        description: "Print notification content without sending it."
+        required: false
+        type: boolean
+        default: false
+      # —— WeChat Work webhook key 也可通过 input 直接传入 ——
+      wechat_webhook_key:
+        description: "WeChat Work Webhook Key (alternative pass-through)"
+        required: false
+        type: string
+        default: ""
+
+    secrets:
+      SLACK_ALERT_BOT:
+        description: "Slack incoming webhook URL."
+        required: false
+      DISCORD_ALERT_BOT:
+        description: "Discord webhook URL."
+        required: false
+      wechat_webhook_key:
+        description: "WeChat Work webhook key (prefer over secret-less input)."
+        required: false
+
+  workflow_dispatch:
+    inputs:
+      environment_name:
+        description: "GitHub environment used to resolve notification settings."
+        required: false
+        type: string
+        default: test
+      repo:
+        required: false
+        type: string
+        default: edgefn/next-router-meta
+      notify_type:
+        description: "通知类型: deploy / deploy_result / build / merge / branch_cleanup"
+        required: true
+        type: string
+        default: "deploy_result"
+      platform:
+        required: false
+        type: string
+        default: ""
+      service_name:
+        required: false
+        type: string
+        default: ""
+      region:
+        required: false
+        type: string
+        default: ""
+      sha:
+        required: false
+        type: string
+        default: ""
+      release_tag:
+        required: false
+        type: string
+        default: ""
+      actor:
+        required: false
+        type: string
+        default: ""
+      run_url:
+        required: false
+        type: string
+        default: ""
+      build_status:
+        required: false
+        type: string
+        default: ""
+      deploy_status:
+        required: false
+        type: string
+        default: ""
+      run_status:
+        required: false
+        type: string
+        default: ""
+      pr_author:
+        description: "PR 作者（merge 通知用）"
+        required: false
+        type: string
+        default: ""
+      pr_number:
+        description: "PR 编号（merge 通知用）"
+        required: false
+        type: string
+        default: ""
+      pr_title:
+        description: "PR 标题（merge 通知用）"
+        required: false
+        type: string
+        default: ""
+      pr_url:
+        description: "PR 链接（merge 通知用）"
+        required: false
+        type: string
+        default: ""
+      base_ref:
+        description: "PR 目标分支（merge 通知用）"
+        required: false
+        type: string
+        default: ""
+      head_ref:
+        description: "PR 来源分支（merge 通知用）"
+        required: false
+        type: string
+        default: ""
+      default_branch:
+        description: "默认分支（branch_cleanup 通知用）"
+        required: false
+        type: string
+        default: ""
+      deleted_count:
+        description: "已删除分支数量（branch_cleanup 通知用）"
+        required: false
+        type: string
+        default: "0"
+      deleted_branches:
+        description: "已删除分支列表（branch_cleanup 通知用）"
+        required: false
+        type: string
+        default: ""
+      dry_run:
+        description: "Print notification content without sending it."
+        required: false
+        type: boolean
+        default: true
+      wechat_webhook_key:
+        description: "WeChat Work Webhook Key"
+        required: false
+        type: string
+        default: ""
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      # 加载共享的 formatter（复用 notification-format.cjs）
+      - name: Checkout notification scripts
+        uses: actions/checkout@v6
+        with:
+          repository: edgefn/.github
+          ref: ${{ github.repository == 'edgefn/.github' && github.sha || 'main' }}
+          path: .notification-source
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+
+      - name: Send notifications to all channels
+        uses: actions/github-script@v8
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+          # —— 三个渠道的 webhook，缺失时跳过对应渠道 ——
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_ALERT_BOT }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_ALERT_BOT }}
+          WECHAT_WEBHOOK_KEY: ${{ secrets.wechat_webhook_key || inputs.wechat_webhook_key }}
+          # —— 所有业务 inputs ——
+          NOTIFY_TYPE: ${{ inputs.notify_type }}
+          PLATFORM: ${{ inputs.platform }}
+          SERVICE_NAME: ${{ inputs.service_name }}
+          ENV_NAME: ${{ inputs.environment_name }}
+          REGION: ${{ inputs.region }}
+          REPO: ${{ inputs.repo }}
+          SHA: ${{ inputs.sha }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          ACTOR: ${{ inputs.actor }}
+          RUN_URL: ${{ inputs.run_url }}
+          BUILD_STATUS: ${{ inputs.build_status }}
+          DEPLOY_STATUS: ${{ inputs.deploy_status }}
+          RUN_STATUS: ${{ inputs.run_status }}
+          PR_AUTHOR: ${{ inputs.pr_author }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          PR_TITLE: ${{ inputs.pr_title }}
+          PR_URL: ${{ inputs.pr_url }}
+          BASE_REF: ${{ inputs.base_ref }}
+          HEAD_REF: ${{ inputs.head_ref }}
+          DEFAULT_BRANCH: ${{ inputs.default_branch }}
+          DELETED_COUNT: ${{ inputs.deleted_count }}
+          DELETED_BRANCHES: ${{ inputs.deleted_branches }}
+        with:
+          script: |
+            const { buildNotification } = require(`${process.env.GITHUB_WORKSPACE}/.notification-source/.github/scripts/notification-format.cjs`);
+            const get = (key, fallback = '') => process.env[key] || fallback;
+            const MAX_RETRIES = 3;
+            const RETRY_BACKOFF = 1000;
+            const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+            // ---------- 1. 三个渠道的 webhook 映射 ----------
+            const DISCORD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36';
+            const channels = [
+              {
+                name: 'slack',
+                webhook: get('SLACK_WEBHOOK_URL'),
+                buildReq: (payload) => ({
+                  url: get('SLACK_WEBHOOK_URL'),
+                  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                  body: new URLSearchParams({ payload: JSON.stringify(payload) }).toString(),
+                }),
+                validate: (resp, text) => {
+                  if (text.trim() !== 'ok') throw new Error(`Slack rejected: ${text}`);
+                },
+              },
+              {
+                name: 'discord',
+                webhook: get('DISCORD_WEBHOOK_URL'),
+                buildReq: (payload) => ({
+                  url: get('DISCORD_WEBHOOK_URL'),
+                  headers: {
+                    'Content-Type': 'application/json; charset=utf-8',
+                    'User-Agent': DISCORD_UA, // 防 Cloudflare 403
+                  },
+                  body: JSON.stringify(payload),
+                }),
+                validate: () => { /* Discord 204 即成功 */ },
+              },
+              {
+                name: 'wechat',
+                webhook: get('WECHAT_WEBHOOK_KEY'),
+                buildReq: (payload) => ({
+                  url: `https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=${get('WECHAT_WEBHOOK_KEY')}`,
+                  headers: { 'Content-Type': 'application/json; charset=utf-8' },
+                  body: JSON.stringify(payload),
+                }),
+                validate: (resp, text) => {
+                  const result = JSON.parse(text);
+                  if (result.errcode !== 0) throw new Error(`WeChat error: ${text}`);
+                },
+              },
+            ];
+
+            // ---------- 2. dry_run 模式 ----------
+            const dry = get('DRY_RUN') === 'true';
+            if (dry) {
+              for (const ch of channels) {
+                if (!ch.webhook) continue;
+                core.info(`[dry_run:${ch.name}] payload:\n` + JSON.stringify(buildNotification(ch.name), null, 2));
+              }
+              return;
+            }
+
+            // ---------- 3. 依次发送每个渠道（无 webhook 跳过，不影响其他） ----------
+            let allOk = true;
+            for (const ch of channels) {
+              if (!ch.webhook) {
+                core.info(`[${ch.name}] webhook not configured, skipping.`);
+                continue;
+              }
+              const payload = buildNotification(ch.name);
+              let sent = false;
+              let lastErr;
+              for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+                try {
+                  const { url, headers, body } = ch.buildReq(payload);
+                  const resp = await fetch(url, { method: 'POST', headers, body, signal: AbortSignal.timeout(15000) });
+                  const text = await resp.text();
+                  if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${text}`);
+                  ch.validate(resp, text);
+                  core.info(`[${ch.name}] notification sent successfully.`);
+                  sent = true;
+                  break;
+                } catch (err) {
+                  lastErr = err;
+                  core.warning(`[${ch.name}] attempt ${attempt}/${MAX_RETRIES} failed: ${err.message}`);
+                  if (attempt < MAX_RETRIES) await sleep(RETRY_BACKOFF * Math.pow(2, attempt - 1));
+                }
+              }
+              if (!sent) {
+                allOk = false;
+                core.error(`[${ch.name}] failed after ${MAX_RETRIES} retries: ${lastErr.message}`);
+              }
+            }
+            if (!allOk) throw new Error('One or more channels failed to send.');
